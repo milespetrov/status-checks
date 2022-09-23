@@ -1,6 +1,6 @@
 import download from 'download'
 import StreamZip from 'node-stream-zip'
-import type {Octokit, TypeScriptResults, ActionInterface} from './constants.js'
+import type {Octokit, ActionInterface} from './constants.js'
 import {info, notice} from '@actions/core'
 
 export const isNullOrUndefined = (
@@ -8,11 +8,21 @@ export const isNullOrUndefined = (
 ): value is undefined | null | '' =>
   typeof value === 'undefined' || value === null || value === ''
 
+export const results = {
+  ts: {
+    errors: 0
+  },
+  lint: {
+    errors: 0,
+    warnings: 0
+  },
+  prettierWarning: false
+}
+
 export async function findAndExtractArtifact(
   action: ActionInterface
-): Promise<TypeScriptResults | null> {
+): Promise<typeof results | null> {
   info(`Looking for latest upload of ${action.baseSha}`)
-  info(`${action.baseRepo} ${action.baseOwner} ${action.octokit}`)
   const location = await findLatestArtifact(
     action.baseSha,
     action.baseRepo,

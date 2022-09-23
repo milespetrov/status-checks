@@ -1,14 +1,8 @@
 import exec from '@actions/exec'
-import {info, warning, setFailed, setOutput} from '@actions/core'
-import artifact from '@actions/artifact'
-import fs from 'fs'
-import {createAction, TypeScriptResults} from './constants.js'
-import {findAndExtractArtifact} from './lib.js'
-const RESULT_FILE = 'status-results.json'
+import {info, warning} from '@actions/core'
+import type {ActionInterface, TypeScriptResults, Results} from './constants.js'
 
-export const artifactClient = artifact.create()
-
-export async function run(action = createAction()): Promise<TypeScriptResults> {
+export async function run(action: ActionInterface): Promise<TypeScriptResults> {
   const results = await tsCheck(action.inputs.tsCommand)
   let errorCount = results.errors
   info(`Compare: ${action.inputs.compare} \nPR:${action.isPR}`)
@@ -18,27 +12,23 @@ export async function run(action = createAction()): Promise<TypeScriptResults> {
 
   info(`Error count: ${errorCount} \n Action Errors: ${action.inputs.tsErrors}`)
   if (errorCount > action.inputs.tsErrors) {
-    setFailed(
-      `Too many TypeScript errors! There were ${results.errors} errors but only ${action.inputs.tsErrors} are allowed.`
-    )
+    results.failed = true
+    warning('TypeScript check failed!')
   } else {
     info(`Typescript check has passed!`)
   }
-
-  fs.writeFileSync(RESULT_FILE, JSON.stringify(results))
-  await artifactClient.uploadArtifact(action.sha, [RESULT_FILE], '.')
-  setOutput('ts-errors', results.errors)
   return results
 }
 
-async function compareErrors(errorCount: number, action): Promise<number> {
-  try {
-    const results = await findAndExtractArtifact(action)
-    return errorCount - results!.errors
-  } catch {
-    warning('The head branch is missing status data, cannot compare this PR.')
-    return errorCount
+async function compareErrors(
+  errorCount: number,
+  action: ActionInterface
+): Promise<number> {
+  if (action.previousResults) {
+    info(`Previous errors: ${action.previousResults.ts.errors}`)
+    return errorCount - action.previousResults.ts.errors
   }
+  return errorCount
 }
 
 async function tsCheck(command: string): Promise<TypeScriptResults> {
@@ -48,7 +38,7 @@ async function tsCheck(command: string): Promise<TypeScriptResults> {
 
   const regex = /Found (\d+) errors?( in (\d+) files?)?/gm
   let m
-  let output: TypeScriptResults = {errors: 0, files: 0}
+  let output: TypeScriptResults = {errors: 0, files: 0, failed: false}
 
   if ((m = regex.exec(result.stdout)) !== null) {
     output.errors = parseInt(m[1])
